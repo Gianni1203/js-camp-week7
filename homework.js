@@ -25,6 +25,8 @@ const ADMIN_TOKEN = process.env.API_KEY;
 function formatOrderDate(timestamp) {
   // 請實作此函式
   // 提示：dayjs.unix(timestamp).format('YYYY/MM/DD HH:mm')
+
+  return dayjs.unix(timestamp).format("YYYY/MM/DD HH:mm");
 }
 
 /**
@@ -38,6 +40,13 @@ function getDaysAgo(timestamp) {
   // 1. 用 dayjs() 取得今天
   // 2. 用 dayjs.unix(timestamp) 取得訂單日期
   // 3. 用 .diff() 計算天數差異
+  const today = dayjs();
+  const orderDate = dayjs.unix(timestamp);
+  const diff = today.diff(orderDate, "day");
+  if (diff === 0) {
+    return '今天';
+  }
+  return `${diff} 天前`;
 }
 
 /**
@@ -47,6 +56,10 @@ function getDaysAgo(timestamp) {
  */
 function isOrderOverdue(timestamp) {
   // 請實作此函式
+  const today = dayjs();
+  const orderDate = dayjs.unix(timestamp);
+
+  return today.diff(orderDate, 'day') > 7;
 }
 
 /**
@@ -60,6 +73,12 @@ function getThisWeekOrders(orders) {
   // 1. 用 dayjs().startOf('week') 取得本週開始
   // 2. 用 dayjs().endOf('week') 取得本週結束
   // 3. 用 .isBefore() 和 .isAfter() 判斷
+  const start = dayjs().startOf('week');
+  const end = dayjs().endOf('week');
+  return orders.filter(order => {
+    const oderDate = dayjs.unix(order.createdAt)
+    return oderDate.isAfter(start) && oderDate.isBefore(end)
+  })
 }
 
 // ========================================
@@ -80,6 +99,33 @@ function getThisWeekOrders(orders) {
  */
 function validateOrderUser(data) {
   // 請實作此函式
+  const errors = []
+  const telRegex = /^09\d{8}$/;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const validPayments = ["ATM", "Credit Card", "Apple Pay"];
+
+  if (!data.name || data.name.trim().length === 0) {
+    errors.push('姓名不可為空!')
+  }
+
+  if (!data.address || data.address.trim().length === 0) {
+    errors.push('地址不可為空!')
+  }
+
+  if (!telRegex.test(data.tel)) {
+    errors.push('必須是 09 開頭的 10 位數字!')
+  }
+
+  if (!emailRegex.test(data.email)) {
+    errors.push('必須包含 @ 符號')
+  }
+
+  if (!validPayments.includes(data.payment)) {
+    errors.push("必須是 'ATM', 'Credit Card', 'Apple Pay' 其中之一")
+  }
+
+  return { isValid: errors.length === 0, errors }
+
 }
 
 /**
@@ -94,6 +140,18 @@ function validateOrderUser(data) {
  */
 function validateCartQuantity(quantity) {
   // 請實作此函式
+  if (!Number.isInteger(quantity)) {
+    // 錯誤處理
+    return { isValid: false, error: "數量必須是正整數" }
+  }
+  if (quantity < 1) {
+    return { isValid: false, error: "數量不可小於1" }
+  }
+  if (quantity > 99) {
+    return { isValid: false, error: "數量不可大於99" }
+  }
+
+  return { isValid: true }
 }
 
 // ========================================
@@ -107,6 +165,7 @@ function validateCartQuantity(quantity) {
 function generateOrderId() {
   // 請實作此函式
   // 提示：可以用 Date.now().toString(36) + Math.random().toString(36).slice(2)
+  return `ORD-${Date.now().toString(36) + Math.random().toString(36).slice(2)}`;
 }
 
 /**
@@ -115,6 +174,7 @@ function generateOrderId() {
  */
 function generateCartItemId() {
   // 請實作此函式
+  return `CART-${Date.now().toString(36) + Math.random().toString(36).slice(2)}`;
 }
 
 // ========================================
@@ -129,6 +189,8 @@ async function getProductsWithAxios() {
   // 請實作此函式
   // 提示：axios.get() 會自動解析 JSON，不需要 .json()
   // 回傳 response.data.products
+  const response = await axios.get(`${BASE_URL}/api/livejs/v1/customer/${API_PATH}/products`);
+  return response.data.products;
 }
 
 /**
@@ -140,6 +202,14 @@ async function getProductsWithAxios() {
 async function addToCartWithAxios(productId, quantity) {
   // 請實作此函式
   // 提示：axios.post(url, data) 會自動設定 Content-Type
+  const response = await axios.post(`${BASE_URL}/api/livejs/v1/customer/${API_PATH}/carts`,
+    {
+      data: {
+        productId,
+        quantity,
+      }
+    });
+  return response.data;
 }
 
 /**
@@ -149,6 +219,10 @@ async function addToCartWithAxios(productId, quantity) {
 async function getOrdersWithAxios() {
   // 請實作此函式
   // 提示：axios.get(url, { headers: { authorization: token } })
+  const response = await axios.get(`${BASE_URL}/api/livejs/v1/admin/${API_PATH}/orders`, {
+    headers : {Authorization: ADMIN_TOKEN}
+  });
+  return response.data.orders;
 }
 
 /*
@@ -294,13 +368,35 @@ if (require.main === module) {
 
     // 任務四測試
     if (API_PATH) {
-      console.log('\n--- 任務四：Axios API 串接 ---');
+      console.log('\n--- 任務四：Axios API 串接測試開始 ---');
+
+      // 1. 測試：取得產品列表
       try {
         const products = await getProductsWithAxios();
-        console.log('getProductsWithAxios:', products ? `成功取得 ${products.length} 筆產品` : '回傳 undefined');
+        // 使用 ✅ 符號讓成功資訊更明顯
+        console.log(`✅ [1/3] getProductsWithAxios: 成功，取得 ${products.length} 筆產品`);
       } catch (error) {
-        console.log('getProductsWithAxios 錯誤:', error.message);
+        // 💡 提示：error.response?.data?.message 通常能抓到 API 回傳的具體錯誤原因
+        console.log(`❌ [1/3] getProductsWithAxios 錯誤:`, error.response?.data?.message || error.message);
       }
+
+      // 2. 測試：加入購物車
+      try {
+        // 這裡可以使用你固定的 ID 或從 products[0] 抓取的動態 ID
+        const cartResults = await addToCartWithAxios(`frtQcmqOHwSStMZKOTCn`, 6);
+        console.log(`✅ [2/3] addToCartWithAxios: 成功`, cartResults);
+      } catch (error) {
+        console.log(`❌ [2/3] addToCartWithAxios 錯誤:`, error.response?.data?.message || error.message);
+      }
+
+      // 3. 測試：取得訂單列表
+      try {
+        const orders = await getOrdersWithAxios();
+        console.log("✅ [3/3] getOrdersWithAxios:", orders);
+      } catch (error) {
+        console.log(`❌ [3/3] getOrdersWithAxios 錯誤:`, error.response?.data?.message || error.message);
+      }
+
     } else {
       console.log('\n--- 任務四：請先在 .env 設定 API_PATH ---');
     }
