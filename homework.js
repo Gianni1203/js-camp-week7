@@ -228,11 +228,14 @@ async function getOrdersWithAxios() {
 /*
 比較題：請說明 fetch 和 axios 的主要差異
 
-1. ____________________________________
+1. fetch 要回傳一個Response 物件，必須額外呼叫 .json()方法才能將資料轉為JavaScript 物件，
+而axios 預設就會解析好，直接透過response.data 取得結果。
 
-2. ____________________________________
+2. fetch 必須手動檢查 response.ok 屬性來判斷是否成功，只有在網路錯誤時才會觸發 catch，
+axios 預設只要HTTP狀態碼超出2xx 的範圍，就會觸發catch。
 
-3. ____________________________________
+3. 用fetch 發送POST請求時，需要手動設定headers 和 JSON.stringify()，
+axios 則會自動設定Content-Type 並將物件轉為JSON
 */
 
 // ========================================
@@ -253,6 +256,10 @@ const OrderService = {
    */
   async fetchOrders() {
     // 請實作此函式
+    const response = await axios.get(`${this.baseURL}/api/livejs/v1/admin/${this.apiPath}/orders`, {
+      headers : {Authorization: ADMIN_TOKEN}
+    })
+    return response.data.orders;
   },
 
   /**
@@ -262,6 +269,12 @@ const OrderService = {
    */
   formatOrders(orders) {
     // 請實作此函式
+    return orders.map(order => {
+      return {
+        ...order,
+      formattedDate: dayjs.unix(order.createdAt).format("YYYY/MM/DD HH:mm"),
+      }
+    })
   },
 
   /**
@@ -271,6 +284,7 @@ const OrderService = {
    */
   filterUnpaidOrders(orders) {
     // 請實作此函式
+    return orders.filter(order => !order.paid);
   },
 
   /**
@@ -388,7 +402,6 @@ if (require.main === module) {
       } catch (error) {
         console.log(`❌ [2/3] addToCartWithAxios 錯誤:`, error.response?.data?.message || error.message);
       }
-
       // 3. 測試：取得訂單列表
       try {
         const orders = await getOrdersWithAxios();
